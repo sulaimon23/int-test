@@ -1,55 +1,88 @@
-///<reference types="@testing-library/jest-dom" />
+import '@testing-library/jest-dom';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import axios from 'axios';
+import { BrowserRouter } from 'react-router-dom';
+import ResultPage from '../pages/result.page';
 
-import { act, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { BrowserRouter } from 'react-router-dom'
-import ResultPage from '../pages/result.page'
+import { AxiosResponse } from 'axios';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('ResultPage Component', () => {
-  it('renders the ResultPage component', async () => {
-    await act(async () => {
-      render(
-        <BrowserRouter>
-          <ResultPage />
-        </BrowserRouter>,
-      )
-    })
+    beforeEach(() => {
+        mockedAxios.get.mockResolvedValue({
+            data: [
+                { id: 1, author: 'Author Name', title: 'Post Title', body: 'example body' },
+                { id: 2, author: 'Another Author', title: 'Another Post', body: 'another body' },
+            ],
+        } as AxiosResponse);
+    });
 
-    expect(screen.getByTestId('result-page')).toBeInTheDocument()
-  })
+    afterEach(() => {
+        jest.clearAllMocks();
+    });
 
-  it('renders the ResultPage component with loading state', async () => {
-    await act(async () => {
-      render(
-        <BrowserRouter>
-          <ResultPage />
-        </BrowserRouter>,
-      )
-    })
+    it('renders the ResultPage component', async () => {
+        await act(async () => {
+            render(
+                <BrowserRouter>
+                    <ResultPage />
+                </BrowserRouter>
+            );
+        });
 
-    expect(screen.getByTestId('loader')).toBeInTheDocument()
-  })
+        await waitFor(() => {
+            expect(screen.getByTestId('result-page')).toBeInTheDocument();
+        });
+    });
 
-  it('renders search results based on input', async () => {
-    render(
-      <BrowserRouter>
-        <ResultPage />
-      </BrowserRouter>,
-    )
+    it('renders the ResultPage component with loading state', async () => {
+        mockedAxios.get.mockImplementation(() => new Promise(() => { }));
 
-    await screen.findByTestId('result-page')
+        await act(async () => {
+            render(
+                <BrowserRouter>
+                    <ResultPage />
+                </BrowserRouter>
+            );
+        });
 
-    const searchInput = screen.getByPlaceholderText('Author name, title...')
-    const searchButton = screen.getByText('Search')
+        expect(screen.getByTestId('loader')).toBeInTheDocument();
 
-    userEvent.type(searchInput, 'example')
-    userEvent.click(searchButton)
+        mockedAxios.get.mockResolvedValue({
+            data: [
+                { id: 1, author: 'Author Name', title: 'Post Title', body: 'example body' },
+                { id: 2, author: 'Another Author', title: 'Another Post', body: 'another body' },
+            ],
+        } as AxiosResponse);
+    });
 
-    await screen.findByTestId('result-page')
+    it('renders search results based on input', async () => {
+        await act(async () => {
+            render(
+                <BrowserRouter>
+                    <ResultPage />
+                </BrowserRouter>
+            );
+        });
 
-    await waitFor(() => {
-      expect(screen.queryByText('No data found')).toBeNull()
-      expect(screen.getAllByTestId('post-card')[0]).toBeInTheDocument()
-    })
-  })
-})
+        await waitFor(() => screen.getByTestId('result-page'));
+
+        const searchInput = screen.getByPlaceholderText('Author name, title...');
+        const searchButton = screen.getByText('Search');
+
+        userEvent.type(searchInput, 'example');
+        userEvent.click(searchButton);
+
+        await waitFor(() => {
+            expect(screen.queryByText('No data found')).not.toBeInTheDocument();
+        });
+
+        const postCards = await screen.findAllByTestId('post-card');
+        expect(postCards.length).toBeGreaterThan(0);
+
+        expect(postCards[0]).toHaveTextContent(/Author Name/i);
+    });
+});
